@@ -2,6 +2,7 @@ from importlib import import_module
 
 from telebot import TeleBot, util
 from voluptuous import Schema, Required, Any
+from redis import Redis
 
 from message_types import TextMessage, PhotoMessage
 
@@ -18,6 +19,7 @@ schema = Schema({
 class TGFeed:
     bot: TeleBot = None
     config: dict = None
+    redis: Redis = None
     plugins = []
 
 
@@ -39,6 +41,7 @@ def set_config(config):
 def init(config):
     set_config(config)
     TGFeed.bot = TeleBot(TGFeed.config['bot_token'])
+    TGFeed.redis = Redis()
     # register plugins
     for plugin in TGFeed.config['plugins']:
         m = import_module(f"plugins.{plugin['name']}")
@@ -55,7 +58,8 @@ def send_split_text(chat_id, text):
 def do_work():
     for plugin in TGFeed.plugins:
         try:
-            last_id, updates = plugin(0)  # get last id
+            last_id, updates = plugin(TGFeed.redis.get(f'tg_feed_{plugin.name}') or 0)
+            TGFeed.redis.set(f'tg_feed_{plugin.name}', last_id)
             for update in updates:
                 if isinstance(update, TextMessage):
                     send_split_text(plugin.chat_id, update.text)

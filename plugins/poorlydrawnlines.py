@@ -3,7 +3,7 @@ import requests
 from message_types import PhotoMessage
 
 
-def get_updates(last_id):
+def get_updates(last_id, **kwargs):
     last_id = int(last_id)
     result = []
     media: list = requests.get('http://www.poorlydrawnlines.com/wp-json/wp/v2/media').json()

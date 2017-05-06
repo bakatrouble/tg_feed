@@ -12,7 +12,9 @@ schema = Schema({
     Required('plugins'): [{
         Required('name'): str,
         Required('chat_id'): Any(str, int),
+        'config': dict,
     }],
+    Required('config'): dict
 })
 
 
@@ -24,13 +26,14 @@ class TGFeed:
 
 
 class Plugin:
-    def __init__(self, name, chat_id, func):
+    def __init__(self, name, chat_id, func, config):
         self.name = name
         self.chat_id = chat_id
         self.func = func
+        self.config = config
 
     def __call__(self, last_id):
-        return self.func(last_id)
+        return self.func(last_id, config=self.config, global_config=TGFeed.config['config'].get(self.name, {}))
 
 
 def set_config(config):
@@ -47,7 +50,7 @@ def init(config):
         m = import_module(f"plugins.{plugin['name']}")
         if not (hasattr(m, 'get_updates') and callable(m.get_updates)):
             raise ImportError(f'Plugin "{plugin["name"]}" has no callable "get_updates()"')
-        TGFeed.plugins.append(Plugin(plugin['name'], plugin['chat_id'], m.get_updates))
+        TGFeed.plugins.append(Plugin(plugin['name'], plugin['chat_id'], m.get_updates, plugin.get('config', {})))
 
 
 def send_split_text(chat_id, text):
@@ -58,8 +61,8 @@ def send_split_text(chat_id, text):
 def do_work():
     for plugin in TGFeed.plugins:
         try:
-            last_id, updates = plugin(TGFeed.redis.get(f'tg_feed_{plugin.name}') or 0)
-            TGFeed.redis.set(f'tg_feed_{plugin.name}', last_id)
+            last_id, updates = plugin(TGFeed.redis.get(f'tg_feed_{plugin.name}_{plugin.chat_id}') or 0)
+            TGFeed.redis.set(f'tg_feed_{plugin.name}_{plugin.chat_id}', last_id)
             for update in updates:
                 if isinstance(update, TextMessage):
                     send_split_text(plugin.chat_id, update.text)
